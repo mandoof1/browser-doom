@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>browser-port: DOOM</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%231a1a1a'/><rect x='3' y='4' width='10' height='8' fill='%23c33'/></svg>">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#111; color:#ddd; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  #wrap { display:flex; flex-direction:column; align-items:center; gap:10px; padding:16px; }
+  canvas { image-rendering:pixelated; background:#000; max-width:100%; height:auto; aspect-ratio:4/3; }
+  #bar { display:flex; gap:16px; flex-wrap:wrap; align-items:center; width:min(960px,100%); }
+  #log { width:min(960px,100%); white-space:pre-wrap; background:#0b0b0b; border:1px solid #262626;
+         padding:8px; max-height:34vh; overflow:auto; }
+  .k { color:#888; } .ok { color:#7bd88f; } .err { color:#ff7b72; } .dim { color:#666; }
+  progress { width:220px; }
+  h1 { font-size:15px; margin:4px 0; font-weight:600; }
+  small { color:#777; }
+</style>
+</head>
+<body>
+<div id=wrap>
+  <h1 id=title>browser-port &middot; DOOM</h1>
+  <div id=bar>
+    <span id=stage class=k>boot</span>
+    <progress id=prog max=100 value=0 hidden></progress>
+    <span id=stats class=dim></span>
+  </div>
+  <canvas id=screen width=640 height=400></canvas>
+  <div id=log></div>
+  <small>keys: arrows move/turn &middot; alt+arrows or &lt;&gt; strafe &middot; ctrl fire &middot; space use &middot; shift run &middot; esc menu &middot; f1-f6 save/load &middot; gamepad also works</small>
+</div>
+<script src="/app/wadstream.js"></script>
+<script src="/app/saves.js"></script>
+<script src="/app/present.js"></script>
+<script src="/app/input.js"></script>
+<script src="/app/app.js"></script>
+</body>
+</html>

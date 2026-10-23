@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=doomgeneric
+Comment=Port of Doom for Nova
+Exec=/bin/doom
+Icon=/Library/AppData/org.boredos.doomgeneric/doomgeneric.png
+Terminal=false
+Categories=Game;Entertainment;
