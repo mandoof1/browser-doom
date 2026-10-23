@@ -16,6 +16,31 @@ Three engine builds, all verified in headless Brave:
 
 ![E1M1 in Brave](shots/played.png)
 
+## Live
+
+**https://browser-doom.onrender.com/?wad=%2Fdata%2Ffreedoom1.wad&build=doom&warp=1,1**
+
+Runs on a Render free web service. Two things to know about a hosted port like this:
+
+* the free instance **spins down when idle**, so the first visit after a while
+  spends ~30 s pulling the 27 MB WAD through the edge; the next visit is served
+  from the browser's OPFS cache and boots in **~3 s**
+* it is a **web service, not a static site**: `SharedArrayBuffer` needs COOP/COEP,
+  the asset streamer needs real `206` responses, and `/telemetry` needs a POST
+  handler — a static host can give you none of that
+
+Verified against the live URL with `node tools/livecheck.mjs`:
+
+| build | boot | fps | Range requests | console errors |
+|---|---|---|---|---|
+| `doom` (pthreads) | 32.8 s cold | 70 | 54/54 answered `206` | none |
+| `doom_async` | 28.9 s cold | 70 | 54/54 `206` | none |
+| `doom64` (wasm64) | 3.3 s (OPFS cache hit) | 70 | 1 probe, served from cache | none |
+
+`crossOriginIsolated: true` on the hosted origin, so the threaded build really
+does run the engine off the main thread in production.
+
+
 ## Run it
 
 ```sh
@@ -44,6 +69,7 @@ npm i puppeteer                      # drives Brave/Chrome
 node tools/verify.mjs                # boot + input + console cleanliness -> PASS
 node tools/playtest.mjs              # new game, walk, save, reload, restore -> PASS
 node tools/builds.mjs                # all three variants boot and present
+node tools/livecheck.mjs https://browser-doom.onrender.com doom,doom_async,doom64
 ```
 
 `playtest.mjs` does not trust counters. It starts E1M1 with `-warp`, walks
