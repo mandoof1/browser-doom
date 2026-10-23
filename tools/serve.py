@@ -161,9 +161,13 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
-    # Render (and any other PaaS) injects PORT and expects 0.0.0.0.
+    # Render (and any other PaaS) injects PORT and refuses to route a service
+    # that binds loopback: it scans 0.0.0.0 for an open port and fails the
+    # deploy if it finds nothing. Locally we keep the loopback default.
     port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", "8765"))
-    host = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HOST", "127.0.0.1")
+    hosted = bool(os.environ.get("RENDER")) or bool(os.environ.get("DYNO"))
+    default_host = "0.0.0.0" if hosted else "127.0.0.1"
+    host = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HOST", default_host)
     httpd = ThreadingHTTPServer((host, port), Handler)
     print(f"http://{host}:{port}/   (web={os.path.abspath(WEB)} data={os.path.abspath(DATA)})", flush=True)
     try:
