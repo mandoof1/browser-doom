@@ -21,7 +21,13 @@ from urllib.parse import urlparse, parse_qs
 ROOT = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.abspath(os.path.join(ROOT, "..", "web"))
 DATA = os.path.abspath(os.path.join(ROOT, "..", "data"))
+# On a hosted box the repo directory may be read-only, so fall back to /tmp.
 TELEMETRY = os.path.join(ROOT, "telemetry.jsonl")
+try:
+    with open(TELEMETRY, "a"):
+        pass
+except OSError:
+    TELEMETRY = os.path.join(os.environ.get("TMPDIR", "/tmp"), "browser-port-telemetry.jsonl")
 
 MIME = {
     ".html": "text/html; charset=utf-8",
@@ -35,6 +41,9 @@ MIME = {
 
 class Handler(SimpleHTTPRequestHandler):
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, **MIME}
+    # Keep-alive matters here: the asset streamer makes dozens of Range requests
+    # for one WAD, and HTTP/1.0 would open a fresh connection for every one.
+    protocol_version = "HTTP/1.1"
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=WEB, **kw)
@@ -54,11 +63,28 @@ class Handler(SimpleHTTPRequestHandler):
     # --- Range support for the WAD ----------------------------------------
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/health":
+            return self.health()
         if path.startswith("/data/"):
             return self.serve_file(os.path.join(DATA, path[len("/data/"):]))
         # /app/* and /build/* live under web/ and resolve as-is
         self.path = path
         return super().do_GET()
+
+    def health(self):
+        wad = os.path.join(DATA, "freedoom1.wad")
+        out = json.dumps({
+            "ok": True,
+            "isolated": True,          # COOP/COEP are sent on every response
+            "wad": os.path.getsize(wad) if os.path.isfile(wad) else None,
+            "builds": [f[:-5] for f in sorted(os.listdir(WEB + "/build"))
+                       if f.endswith(".wasm")] if os.path.isdir(WEB + "/build") else [],
+        }).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
 
     def serve_file(self, fpath):
         if not fpath.startswith(os.path.abspath(DATA)) or not os.path.isfile(fpath):
@@ -118,8 +144,11 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception:
             rec = {"raw": body[:2000].decode("utf-8", "replace")}
         rec["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        with open(TELEMETRY, "a") as f:
-            f.write(json.dumps(rec) + "\n")
+        try:
+            with open(TELEMETRY, "a") as f:
+                f.write(json.dumps(rec) + "\n")
+        except OSError as e:
+            sys.stderr.write("telemetry write failed: %s\n" % e)
         out = b'{"ok":true}'
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -132,9 +161,11 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"http://127.0.0.1:{port}/   (web={os.path.abspath(WEB)} data={os.path.abspath(DATA)})")
+    # Render (and any other PaaS) injects PORT and expects 0.0.0.0.
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", "8765"))
+    host = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HOST", "127.0.0.1")
+    httpd = ThreadingHTTPServer((host, port), Handler)
+    print(f"http://{host}:{port}/   (web={os.path.abspath(WEB)} data={os.path.abspath(DATA)})", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

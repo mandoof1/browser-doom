@@ -1,0 +1,15 @@
+# Render blueprint. The server IS part of this port: SharedArrayBuffer only
+# exists in a cross-origin-isolated context, so the COOP/COEP headers, the HTTP
+# Range responses the asset streamer uses, and the /telemetry endpoint all have
+# to come from the same origin. A plain static host cannot run the threaded
+# build, which is why this is a web service and not a static site.
+services:
+  - type: web
+    name: browser-doom
+    runtime: python
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    buildCommand: bash tools/get-data.sh
+    startCommand: python3 tools/serve.py
+    autoDeploy: true

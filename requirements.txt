@@ -1,0 +1,2 @@
+# stdlib only: the server is python http.server plus a few headers.
+# Nothing to install - Render still needs this file to pick the Python runtime.
