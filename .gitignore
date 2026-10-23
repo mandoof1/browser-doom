@@ -14,4 +14,4 @@ tools/telemetry.jsonl
 shots/netcheck.png
 shots/play-0[0-4]*.png
 shots/build-*.png
-build/
+/build/
