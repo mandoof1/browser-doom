@@ -288,7 +288,7 @@ void I_GetEvent(void)
         UpdateShiftStatus(pressed, key);
 
         // process event
-        
+
         if (pressed)
         {
             // data1 has the key pressed, data2 has the character
@@ -320,6 +320,25 @@ void I_GetEvent(void)
                 D_PostEvent(&event);
             }
             break;
+        }
+    }
+
+    /* Mouse look. This fork commented out the SDL motion handler, so the
+     * browser layer accumulates pointer-lock deltas and a button mask, and
+     * G_Responder turns ev_mouse into mousex/mousey/mousebuttons[]. */
+    {
+        int dx = 0, dy = 0;
+        unsigned int buttons = 0;
+
+        extern int dg_mouse_consume(int *dx, int *dy, unsigned int *buttons);
+
+        if (dg_mouse_consume(&dx, &dy, &buttons))
+        {
+            event.type  = ev_mouse;
+            event.data1 = (int)buttons;
+            event.data2 = dx;
+            event.data3 = dy;
+            D_PostEvent(&event);
         }
     }
 

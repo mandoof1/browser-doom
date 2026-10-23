@@ -40,6 +40,10 @@ Verified against the live URL with `node tools/livecheck.mjs`:
 `crossOriginIsolated: true` on the hosted origin, so the threaded build really
 does run the engine off the main thread in production.
 
+`tools/capturetest.mjs` against the live origin: pointer lock engages on click,
+mouse movement changes 42% of the view (mouse look), **Ctrl+S holds 70 fps**
+instead of pausing, and Escape brings up the menu while the loop keeps running.
+
 
 ## Run it
 
@@ -70,6 +74,7 @@ node tools/verify.mjs                # boot + input + console cleanliness -> PAS
 node tools/playtest.mjs              # new game, walk, save, reload, restore -> PASS
 node tools/builds.mjs                # all three variants boot and present
 node tools/firetest.mjs              # Ctrl and mouse click really shoot (ammo 50 -> 47)
+node tools/capturetest.mjs           # click-to-capture: pointer lock, mouse look, Ctrl+S
 node tools/livecheck.mjs https://browser-doom.onrender.com doom,doom_async,doom64
 ```
 
@@ -95,6 +100,30 @@ The engine never learns it is in a browser. It calls `DG_Init`,
 `DG_DrawFrame`, `DG_SleepMs`, `DG_GetTicksMs`, `DG_GetKey` — the doomgeneric
 contract — and the platform layer answers with WASM-heap buffers, a key ring,
 and `emscripten_sleep`/`usleep` depending on the build.
+
+### Input capture: click the canvas
+
+Browser shortcuts eat gameplay: Ctrl+S opens the save dialog and Chrome suspends
+the tab's timers while it is up, which reads to the player as "the game froze".
+So clicking the canvas takes the input:
+
+* **pointer lock** — raw `movementX/Y` deltas, cursor hidden, no accidental drags
+* **keyboard lock** (`navigator.keyboard.lock()`) where available — Chromium
+  stops reserving Ctrl+S / Ctrl+W / Ctrl+Tab, and even Escape, for itself
+* while captured, every key event is `preventDefault`ed as well
+
+Mouse look goes through the engine's own mouse path rather than being faked as
+arrow-key taps: the platform layer accumulates deltas, `I_GetEvent` posts a real
+`ev_mouse`, and `G_Responder` fills `mousex`/`mousey`/`mousebuttons[]`. That
+keeps vanilla semantics, including the part modern players find strange:
+**vertical mouse movement walks** (`forward += mousey` in `G_BuildTiccmd`), and
+horizontal turns unless Alt is held, in which case it strafes.
+
+Escape is the awkward one. Where the Keyboard Lock API works, Escape reaches
+DOOM and opens the menu. Where it does not, the browser keeps Escape for itself
+and it drops the lock without the page ever seeing a key — so losing the lock
+injects an Escape into the engine anyway. Either way Escape means *pause*, which
+is what a DOOM player expects.
 
 ### The bridge (the interesting part)
 
@@ -171,6 +200,11 @@ pattern the 2026 browser ports use for crash reporting.
    use, right = strafe, exactly like vanilla's `mouseb*` bindings).
    `tools/firetest.mjs` proves it from pixels: holding Ctrl changes 21% of the
    view (muzzle flash) and the status bar's ammo counter reads 47 instead of 50.
+9. **`navigator.keyboard` exists but `.lock` does not.** Brave exposes the
+   Keyboard Lock API object with no `lock` method, so feature-detecting on
+   `'keyboard' in navigator` lies to you. Detect the method, and treat losing
+   pointer lock as "pause": inject an Escape key so the menu comes up whether or
+   not the browser handed the key over.
 
 ## Results
 

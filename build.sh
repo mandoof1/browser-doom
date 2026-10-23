@@ -32,7 +32,7 @@ BASE=(
   -sENVIRONMENT=web
   -sEXIT_RUNTIME=0
   -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,FS,HEAPU8,HEAPU32,UTF8ToString
-  -sEXPORTED_FUNCTIONS=_main,_dg_push_key,_dg_stats_addr,_dg_framebuffer,_dg_resx,_dg_resy,_dg_frames,_dg_frame_seq,_dg_set_wad,_dg_inbox_push,_dg_assets_ready,_malloc,_free
+  -sEXPORTED_FUNCTIONS=_main,_dg_push_key,_dg_push_mouse,_dg_set_mouse_button,_dg_stats_addr,_dg_framebuffer,_dg_resx,_dg_resy,_dg_frames,_dg_frame_seq,_dg_set_wad,_dg_inbox_push,_dg_assets_ready,_malloc,_free
   -sASSERTIONS=1
   ${EXTRA_CFLAGS:-}
 )

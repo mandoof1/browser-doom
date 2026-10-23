@@ -17,6 +17,9 @@
   progress { width:220px; }
   h1 { font-size:15px; margin:4px 0; font-weight:600; }
   small { color:#777; }
+  #capture { font:inherit; background:#1d1d1d; color:#bbb; border:1px solid #333; padding:3px 10px;
+             border-radius:4px; cursor:pointer; }
+  #capture.on { background:#123018; color:#7bd88f; border-color:#2c5e36; }
 </style>
 </head>
 <body>
@@ -26,10 +29,14 @@
     <span id=stage class=k>boot</span>
     <progress id=prog max=100 value=0 hidden></progress>
     <span id=stats class=dim></span>
+    <button id=capture type=button title="Click the canvas or this button to capture mouse and keyboard">capture off</button>
   </div>
   <canvas id=screen width=640 height=400></canvas>
   <div id=log></div>
-  <small>keys: arrows move/turn &middot; alt+arrows or &lt;&gt; strafe &middot; ctrl fire &middot; space use &middot; shift run &middot; esc menu &middot; f1-f6 save/load &middot; gamepad also works</small>
+  <small>keys: arrows move/turn &middot; alt+arrows or &lt;&gt; strafe &middot; ctrl or click fire &middot; space use &middot; shift run &middot; esc menu &middot; f1-f6 save/load &middot; gamepad also works<br>
+  click the canvas to <b>capture</b> mouse+keyboard: mouse look turns and walks, and browser
+  shortcuts (Ctrl+S, Ctrl+W, Tab) go to the game instead of the browser. Escape pauses (DOOM menu)
+  and leaves capture; click again to resume.</small>
 </div>
 <script src="/app/wadstream.js"></script>
 <script src="/app/saves.js"></script>

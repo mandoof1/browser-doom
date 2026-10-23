@@ -80,40 +80,136 @@ window.dgInput = (function () {
 
   function reset() { releaseAll(); }
 
-  function bindKeys(target) {
+  function bindKeys(target)
+  {
     target.addEventListener('keydown', (e) => {
+      /* While the canvas owns the input, nothing may leak to the browser:
+       * Ctrl+S opens the save dialog and Chrome suspends the tab's timers while
+       * that dialog is up, which reads to the player as the game freezing. */
+      if (isLocked()) e.preventDefault();
       const code = MAP[e.code];
       if (code === undefined) return;
-      if (PREVENT.has(e.code)) e.preventDefault();
+      if (PREVENT.has(e.code) || isLocked()) e.preventDefault();
       push(true, code);
     });
     target.addEventListener('keyup', (e) => {
+      if (isLocked()) e.preventDefault();
       const code = MAP[e.code];
       if (code === undefined) return;
-      if (PREVENT.has(e.code)) e.preventDefault();
+      if (PREVENT.has(e.code) || isLocked()) e.preventDefault();
       push(false, code);
     });
     target.addEventListener('blur', reset);
   }
 
-  // A browser port has to answer to the mouse as well. Vanilla DOOM's mouse
-  // buttons are fire / use / strafe, and the engine already models them as
-  // keys, so the buttons land on the same keycodes the keyboard uses.
-  const MOUSE_BUTTON = { 0: K.FIRE, 1: K.USE, 2: K.RALT };
+  /* ---- capture ----------------------------------------------------------
+   * Click the canvas and the page takes the mouse and the keyboard:
+   *   pointer lock  -> raw mouse deltas, cursor hidden, no accidental drags
+   *   keyboard lock -> Chromium stops reserving Ctrl+S / Ctrl+W / Ctrl+Tab and
+   *                   even Escape for itself, so the engine sees them
+   * Escape therefore opens the DOOM menu like it does on a native port; the way
+   * out of capture is the chip in the bar, or Ctrl+Esc / Alt+Esc, which the
+   * Keyboard Lock API never captures. */
+  let canvasEl = null;
+  let kbdLocked = false;
+
+  const isLocked = () => !!canvasEl && document.pointerLockElement === canvasEl;
+
+  async function capture()
+  {
+    if (!canvasEl || isLocked()) return false;
+    try {
+      await canvasEl.requestPointerLock({ unadjustedMovement: true });
+    } catch (e) {
+      try { canvasEl.requestPointerLock(); } catch (e2) { return false; }
+    }
+    if (navigator.keyboard && navigator.keyboard.lock)
+    {
+      try { await navigator.keyboard.lock(); kbdLocked = true; }
+      catch (e) { kbdLocked = false; }   // older Chromium: Escape leaves the lock
+    }
+    return isLocked();
+  }
+
+  function releaseCapture()
+  {
+    if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+    kbdLocked = false;
+    if (document.exitPointerLock) document.exitPointerLock();
+  }
+
+  /* ---- mouse ------------------------------------------------------------
+   * Vanilla DOOM's mouse buttons are fire / strafe / use, and the engine models
+   * both buttons and mouse movement, so once the pointer is captured the mouse
+   * drives the engine's own mouse path instead of being faked as key presses. */
+  const MOUSE_KEY   = { 0: K.FIRE, 1: K.USE, 2: K.RALT };   // unlocked fallback
+  const MOUSE_ENGINE = { 0: 0, 2: 1 };                      // left -> mouseb_fire, right -> mouseb_strafe
+  const MAX_DELTA = 300;
+
+  function pushEngineMouse(dx, dy)
+  {
+    if (typeof Module === 'undefined' || !Module._dg_push_mouse) return;
+    const clamp = (v) => Math.max(-MAX_DELTA, Math.min(MAX_DELTA, v | 0));
+    Module.ccall('dg_push_mouse', null, ['number', 'number'], [clamp(dx), clamp(dy)]);
+  }
 
   function bindMouse(canvas)
   {
+    canvasEl = canvas;
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
     canvas.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      const code = MOUSE_BUTTON[e.button];
-      if (code !== undefined) push(true, code, 'mouse');
+      if (!isLocked())
+      {
+        capture();                       // first click takes the input, no fire
+        return;
+      }
+      if (MOUSE_ENGINE[e.button] !== undefined)
+        Module.ccall && Module._dg_set_mouse_button &&
+          Module.ccall('dg_set_mouse_button', null, ['number', 'number'], [MOUSE_ENGINE[e.button], 1]);
+      else if (MOUSE_KEY[e.button] !== undefined)
+        push(true, MOUSE_KEY[e.button], 'mouse');
     });
-    // release on the window: the button can come up outside the canvas
+
     window.addEventListener('mouseup', (e) => {
-      const code = MOUSE_BUTTON[e.button];
-      if (code !== undefined) push(false, code, 'mouse');
+      if (isLocked() && MOUSE_ENGINE[e.button] !== undefined)
+        Module.ccall && Module._dg_set_mouse_button &&
+          Module.ccall('dg_set_mouse_button', null, ['number', 'number'], [MOUSE_ENGINE[e.button], 0]);
+      else if (MOUSE_KEY[e.button] !== undefined)
+        push(false, MOUSE_KEY[e.button], 'mouse');
     });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isLocked()) return;
+      pushEngineMouse(e.movementX || 0, e.movementY || 0);
+    });
+
+    let wasLocked = false;
+    document.addEventListener('pointerlockchange', () => {
+      const now = isLocked();
+
+      if (!now)
+      {
+        releaseAll();                    // nothing may stay held after losing capture
+        if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+        kbdLocked = false;
+
+        /* Where the Keyboard Lock API is missing (Brave has navigator.keyboard
+         * but no .lock), Escape is the browser's to take: it drops the lock and
+         * the page never sees the key. Escape means "pause" to a DOOM player,
+         * so hand the engine one anyway and the menu comes up either way. */
+        if (wasLocked)
+        {
+          push(true, K.ESC, 'capture');
+          push(false, K.ESC, 'capture');
+        }
+      }
+
+      wasLocked = now;
+      window.dgCaptureState = now;
+    });
+
     window.addEventListener('blur', releaseAll);
   }
 
@@ -148,5 +244,5 @@ window.dgInput = (function () {
     return true;
   }
 
-  return { bindKeys, bindMouse, pollPad, K, reset };
+  return { bindKeys, bindMouse, capture, releaseCapture, isLocked, pollPad, K, reset };
 })();

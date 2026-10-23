@@ -60,9 +60,12 @@ await page.keyboard.up('ControlLeft');
 await new Promise(r => setTimeout(r, 1500));
 const ctrlHud = await shot('ctrl-hud', HUD);
 
-// --- mouse ---
+// --- mouse: the first click takes capture, the clicks after that shoot ---
 const mid = { x: 400, y: 270 };
 await page.mouse.move(mid.x, mid.y);
+await page.mouse.click(mid.x, mid.y);
+await new Promise(r => setTimeout(r, 800));
+const captured = await page.evaluate(() => window.dgInput.isLocked());
 await page.mouse.down({ button: 'left' });
 await new Promise(r => setTimeout(r, 900));
 const mouseView = await shot('mouse-view', VIEW);
@@ -85,7 +88,7 @@ const r = {
   ctrl_hud_ammo_changed: pct(baseHud, ctrlHud),
   mouse_view_muzzleflash: pct(baseView, mouseView),
   mouse_hud_ammo_changed: pct(baseHud, mouseHud),
-  keyevents: stats.keyevents, errors
+  keyevents: stats.keyevents, captured, errors
 };
 console.log(JSON.stringify(r, null, 1));
 

@@ -135,6 +135,44 @@ EMSCRIPTEN_KEEPALIVE void dg_push_key(unsigned int pressed, unsigned int key)
     key_head = next;
 }
 
+/* Mouse look. The engine has globals for this (mousex/mousey and a button mask
+ * feeding ev_mouse in G_Responder) but this fork commented out the SDL motion
+ * handler, so the browser layer feeds it instead. Deltas accumulate because the
+ * engine samples once per tic while the browser delivers many movements per
+ * frame; buttons are state, not events. */
+static volatile int mouse_dx;
+static volatile int mouse_dy;
+static volatile unsigned int mouse_buttons;
+
+EMSCRIPTEN_KEEPALIVE void dg_push_mouse(int dx, int dy)
+{
+    mouse_dx += dx;
+    mouse_dy += dy;
+}
+
+EMSCRIPTEN_KEEPALIVE void dg_set_mouse_button(int button, int pressed)
+{
+    if (button < 0 || button >= 32)
+        return;
+
+    if (pressed)
+        mouse_buttons |= (1u << button);
+    else
+        mouse_buttons &= ~(1u << button);
+}
+
+/* Drained by the engine's input layer: deltas are consumed, the mask is not. */
+int dg_mouse_consume(int *dx, int *dy, unsigned int *buttons)
+{
+    *dx = mouse_dx;
+    *dy = mouse_dy;
+    *buttons = mouse_buttons;
+    mouse_dx = 0;
+    mouse_dy = 0;
+
+    return (*dx != 0) || (*dy != 0) || (*buttons != 0);
+}
+
 EMSCRIPTEN_KEEPALIVE unsigned int dg_stats_addr(void)
 {
     return (unsigned int)&stats;

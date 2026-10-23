@@ -122,6 +122,13 @@
       const now = performance.now();
       if (now - lastHud > 500) {
         lastHud = now;
+        const captured = window.dgInput.isLocked();
+        const capEl = document.getElementById('capture');
+        if (capEl) {
+          capEl.textContent = captured ? 'captured · esc pauses and releases'
+                                       : 'click the canvas to capture';
+          capEl.classList.toggle('on', captured);
+        }
         const s = window.doomStats || {};
         const el = (s.last || 0) - (s.started || 0);
         statsEl.textContent = (s.frames || 0) + ' frames · ' +
@@ -150,10 +157,15 @@
       } catch (e) { /* telemetry is optional */ }
     }, 10000);
 
+    const capBtn = document.getElementById('capture');
+    if (capBtn) capBtn.addEventListener('click', () => {
+      window.dgInput.isLocked() ? window.dgInput.releaseCapture() : window.dgInput.capture();
+    });
+
     window.doomBooted = true;
   }
 
   window.dgInput.bindKeys(window);
-  window.dgInput.bindMouse(canvas);   // click = fire, like any other DOOM port
+  window.dgInput.bindMouse(canvas);   // click the canvas: capture, then mouse look + fire
   main().catch((e) => { log('startup failed: ' + ((e && e.message) || e), 'err'); stage('failed'); });
 })();
