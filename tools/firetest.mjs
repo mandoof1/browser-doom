@@ -13,12 +13,17 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const REMOTE = process.argv[2] || null;      // e.g. https://browser-doom.onrender.com
 const PORT = 8769;
-const PAGE = `http://127.0.0.1:${PORT}/?wad=%2Fdata%2Ffreedoom1.wad&build=doom&warp=1,1&extra=-nomonsters`;
+const ORIGIN = REMOTE || `http://127.0.0.1:${PORT}`;
+const PAGE = `${ORIGIN}/?wad=%2Fdata%2Ffreedoom1.wad&build=doom&warp=1,1&extra=-nomonsters`;
 
-const server = spawn('python3', [path.join(ROOT, 'tools', 'serve.py'), String(PORT)],
-                     { cwd: ROOT, stdio: 'ignore' });
-await new Promise(r => setTimeout(r, 1500));
+let server = null;
+if (!REMOTE) {
+  server = spawn('python3', [path.join(ROOT, 'tools', 'serve.py'), String(PORT)],
+                 { cwd: ROOT, stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 1500));
+}
 
 const browser = await puppeteer.launch({
   executablePath: '/usr/bin/brave', headless: true,
@@ -67,7 +72,7 @@ const mouseHud = await shot('mouse-hud', HUD);
 
 const stats = await page.evaluate(() => ({ ...window.doomStats }));
 await browser.close();
-server.kill();
+server?.kill();
 
 const pct = (a, b) => {
   const out = execFileSync('python3', [path.join(ROOT, 'tools', 'imgdiff.py'), a, b],
