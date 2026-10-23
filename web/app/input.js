@@ -23,11 +23,14 @@ window.dgInput = (function () {
     ArrowUp: K.UP, ArrowDown: K.DOWN, ArrowLeft: K.LEFT, ArrowRight: K.RIGHT,
     KeyW: K.UP, KeyS: K.DOWN, KeyA: K.STRAFE_L, KeyD: K.STRAFE_R,
     Space: K.USE, Enter: K.ENTER, Escape: K.ESC, Tab: K.TAB, Backspace: K.BACKSPACE,
-    ControlLeft: K.RCTRL, ControlRight: K.RCTRL,
+    // This engine's fire key is KEY_FIRE (0xa3), not KEY_RCTRL: m_controls.c
+    // ships `int key_fire = KEY_FIRE;`. Sending the real Ctrl scancode (0x9d)
+    // means the engine sees a key that nothing is bound to, and nothing shoots.
+    ControlLeft: K.FIRE, ControlRight: K.FIRE,
     ShiftLeft: K.RSHIFT, ShiftRight: K.RSHIFT,
     AltLeft: K.RALT, AltRight: K.RALT,
     KeyQ: 'Q'.charCodeAt(0), KeyE: 'E'.charCodeAt(0), KeyF: 'F'.charCodeAt(0),
-    KeyY: 'Y'.charCodeAt(0), KeyH: 'H'.charCodeAt(0), KeyJ: 'J'.charCodeAt(0),
+    KeyY: 'Y'.charCodeAt(0), KeyH: 'H'.charCodeAt(0), KeyJ: K.FIRE,
     KeyM: 'M'.charCodeAt(0), KeyR: 'R'.charCodeAt(0),
     Comma: K.PREVW, Period: K.NEXTW,
     Digit1: '1'.charCodeAt(0), Digit2: '2'.charCodeAt(0), Digit3: '3'.charCodeAt(0),
@@ -37,27 +40,45 @@ window.dgInput = (function () {
   };
 
   const PREVENT = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab']);
-  const held = new Set();   /* keys currently down, for transition semantics */
+  const held = new Map();   /* "source:doomcode" -> true, for real transitions */
 
-  function push(pressed, code) {
+  /* Transitions only: the browser repeats keydown while a key is held, and the
+   * menu cursor would scroll off on every repeat. Sources are tracked apart so
+   * that letting go of the mouse cannot release a fire button that Ctrl is
+   * still holding. */
+  function push(pressed, code, source)
+  {
     if (!code) return;
-    /* Only forward real transitions: the browser repeats keydown while a key
-     * is held, and Doom's menu cursor would scroll off on every repeat. */
+    const id = (source || 'kbd') + ':' + code;
+
     if (pressed)
     {
-      if (held.has(code)) return;
-      held.add(code);
+      if (held.has(id)) return;
+      held.set(id, true);
     }
     else
     {
-      if (!held.has(code)) return;
-      held.delete(code);
+      if (!held.has(id)) return;
+      held.delete(id);
     }
     if (typeof Module !== 'undefined' && Module._dg_push_key)
       Module.ccall('dg_push_key', null, ['number', 'number'], [pressed ? 1 : 0, code]);
   }
 
-  function reset() { held.clear(); }
+  /* Losing focus used to leave the engine believing a key was still down, so
+   * the player walked into a wall forever after an alt-tab. */
+  function releaseAll()
+  {
+    for (const id of Array.from(held.keys()))
+    {
+      const code = parseInt(id.split(':')[1], 10);
+      held.delete(id);
+      if (typeof Module !== 'undefined' && Module._dg_push_key)
+        Module.ccall('dg_push_key', null, ['number', 'number'], [0, code]);
+    }
+  }
+
+  function reset() { releaseAll(); }
 
   function bindKeys(target) {
     target.addEventListener('keydown', (e) => {
@@ -73,6 +94,27 @@ window.dgInput = (function () {
       push(false, code);
     });
     target.addEventListener('blur', reset);
+  }
+
+  // A browser port has to answer to the mouse as well. Vanilla DOOM's mouse
+  // buttons are fire / use / strafe, and the engine already models them as
+  // keys, so the buttons land on the same keycodes the keyboard uses.
+  const MOUSE_BUTTON = { 0: K.FIRE, 1: K.USE, 2: K.RALT };
+
+  function bindMouse(canvas)
+  {
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const code = MOUSE_BUTTON[e.button];
+      if (code !== undefined) push(true, code, 'mouse');
+    });
+    // release on the window: the button can come up outside the canvas
+    window.addEventListener('mouseup', (e) => {
+      const code = MOUSE_BUTTON[e.button];
+      if (code !== undefined) push(false, code, 'mouse');
+    });
+    window.addEventListener('blur', releaseAll);
   }
 
   // Gamepad: analog axes become held-key transitions, because Doom's input
@@ -101,10 +143,10 @@ window.dgInput = (function () {
     if (lx < -DEAD) want.add(K.LEFT); else if (lx > DEAD) want.add(K.RIGHT);
     if (rx < -DEAD) want.add(K.STRAFE_L); else if (rx > DEAD) want.add(K.STRAFE_R);
 
-    for (const k of want) if (!padHeld.has(k)) { padHeld.set(k, true); push(true, k); }
-    for (const k of Array.from(padHeld.keys())) if (!want.has(k)) { padHeld.delete(k); push(false, k); }
+    for (const k of want) if (!padHeld.has(k)) { padHeld.set(k, true); push(true, k, 'pad'); }
+    for (const k of Array.from(padHeld.keys())) if (!want.has(k)) { padHeld.delete(k); push(false, k, 'pad'); }
     return true;
   }
 
-  return { bindKeys, pollPad, K, reset };
+  return { bindKeys, bindMouse, pollPad, K, reset };
 })();

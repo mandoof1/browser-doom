@@ -154,5 +154,6 @@
   }
 
   window.dgInput.bindKeys(window);
+  window.dgInput.bindMouse(canvas);   // click = fire, like any other DOOM port
   main().catch((e) => { log('startup failed: ' + ((e && e.message) || e), 'err'); stage('failed'); });
 })();

@@ -69,6 +69,7 @@ npm i puppeteer                      # drives Brave/Chrome
 node tools/verify.mjs                # boot + input + console cleanliness -> PASS
 node tools/playtest.mjs              # new game, walk, save, reload, restore -> PASS
 node tools/builds.mjs                # all three variants boot and present
+node tools/firetest.mjs              # Ctrl and mouse click really shoot (ammo 50 -> 47)
 node tools/livecheck.mjs https://browser-doom.onrender.com doom,doom_async,doom64
 ```
 
@@ -160,6 +161,16 @@ pattern the 2026 browser ports use for crash reporting.
    and swap the channels in the shader instead.
 7. **A restored file needs its directories.** MEMFS starts empty, so replaying
    `./.savegame/doomsav0.dsg` into it requires `mkdir -p` semantics.
+8. **The fire key is not Ctrl's scancode.** `m_controls.c` ships
+   `int key_fire = KEY_FIRE;` where `KEY_FIRE` is `0xa3`, a doomgeneric-level
+   "fire" code rather than a PC scancode. Sending the real right-Ctrl scancode
+   (`0x9d`, what a native port's keyboard layer would produce) posts a key event
+   that *nothing is bound to*: the engine receives it, `gamekeydown[key_fire]`
+   stays false, and the gun just sits there. Fix: map Ctrl to `KEY_FIRE`, and
+   since this is a browser, map the mouse buttons too (left = fire, middle =
+   use, right = strafe, exactly like vanilla's `mouseb*` bindings).
+   `tools/firetest.mjs` proves it from pixels: holding Ctrl changes 21% of the
+   view (muzzle flash) and the status bar's ammo counter reads 47 instead of 50.
 
 ## Results
 
